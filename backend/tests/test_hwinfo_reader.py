@@ -31,11 +31,17 @@ from bridge.hwinfo_reader import (
 
 SIGNATURE = 0x53695748
 
-_HEADER_ALIGNED = "<III4xqIIIIII"
-_HEADER_PACKED = "<IIIqIIIIII"
-_SENSOR_FMT = "<II128s128s"
-_READING_ALIGNED = "<III128s128s16s4xdddd"
-_READING_PACKED = "<III128s128s16sdddd"
+# The three shapes the block has been observed in. "v2" is what HWiNFO 8.x
+# publishes: the classic packed rows with a UTF-8 copy of the label/unit and
+# sensor name appended, which makes the rows larger without moving any of the
+# leading fields. "aligned" is the layout a natural reading of the published C
+# would imply; no build is known to use it, but the reader still falls back to it.
+_LAYOUTS = {
+    #          header fmt        sensor fmt            reading fmt
+    "v2":      ("<IIIqIIIIII",   "<II128s128s128s",    "<III128s128s16sdddd128s16s"),
+    "classic": ("<IIIqIIIIII",   "<II128s128s",        "<III128s128s16sdddd"),
+    "aligned": ("<III4xqIIIIII", "<II128s128s",        "<III128s128s16s4xdddd"),
+}
 
 
 def _b(text: str, width: int) -> bytes:
@@ -43,16 +49,35 @@ def _b(text: str, width: int) -> bytes:
     return raw + b"\0" * (width - len(raw))
 
 
-def build_block(sensors, readings, aligned=True) -> bytes:
-    """Assemble a shared-memory image in HWiNFO's published format.
+def _pack_sensor(fmt: str, sensor_id: int, instance: int, name: str) -> bytes:
+    encoded = _b(name, 128)
+    fields = [sensor_id, instance, encoded, _b("", 128)]
+    if fmt.count("128s") == 3:  # v2 appends a UTF-8 name
+        fields.append(encoded)
+    return struct.pack(fmt, *fields)
+
+
+def _pack_reading(fmt: str, rtype, sensor_index, reading_id, label, unit, value) -> bytes:
+    encoded_label, encoded_unit = _b(label, 128), _b(unit, 16)
+    fields = [
+        rtype, sensor_index, reading_id,
+        encoded_label, _b("", 128), encoded_unit,
+        value, value, value, value,
+    ]
+    if fmt.endswith("128s16s"):  # v2 appends a UTF-8 label and unit
+        fields += [encoded_label, encoded_unit]
+    return struct.pack(fmt, *fields)
+
+
+def build_block(sensors, readings, layout="v2") -> bytes:
+    """Assemble a shared-memory image in one of HWiNFO's block layouts.
 
     ``sensors``  — [(sensor_id, instance, name), ...]
     ``readings`` — [(type, sensor_index, reading_id, label, unit, value), ...]
     """
-    header_fmt = _HEADER_ALIGNED if aligned else _HEADER_PACKED
-    reading_fmt = _READING_ALIGNED if aligned else _READING_PACKED
+    header_fmt, sensor_fmt, reading_fmt = _LAYOUTS[layout]
     header_size = struct.calcsize(header_fmt)
-    sensor_size = struct.calcsize(_SENSOR_FMT)
+    sensor_size = struct.calcsize(sensor_fmt)
     reading_size = struct.calcsize(reading_fmt)
 
     sensor_offset = header_size
@@ -61,8 +86,8 @@ def build_block(sensors, readings, aligned=True) -> bytes:
     header = struct.pack(
         header_fmt,
         SIGNATURE,
-        1,
-        0,
+        2 if layout == "v2" else 1,
+        1 if layout == "v2" else 0,
         int(time.time()),
         sensor_offset,
         sensor_size,
@@ -72,26 +97,8 @@ def build_block(sensors, readings, aligned=True) -> bytes:
         len(readings),
     )
 
-    sensor_bytes = b"".join(
-        struct.pack(_SENSOR_FMT, sid, inst, _b(name, 128), _b("", 128))
-        for sid, inst, name in sensors
-    )
-    reading_bytes = b"".join(
-        struct.pack(
-            reading_fmt,
-            rtype,
-            sensor_index,
-            reading_id,
-            _b(label, 128),
-            _b("", 128),
-            _b(unit, 16),
-            value,
-            value,
-            value,
-            value,
-        )
-        for rtype, sensor_index, reading_id, label, unit, value in readings
-    )
+    sensor_bytes = b"".join(_pack_sensor(sensor_fmt, *s) for s in sensors)
+    reading_bytes = b"".join(_pack_reading(reading_fmt, *r) for r in readings)
     return header + sensor_bytes + reading_bytes
 
 
@@ -139,38 +146,86 @@ def _reader_for(payload: bytes, name: str):
     return shm, reader
 
 
+def _assert_readings_decode(reader):
+    readings = reader.discover()
+    assert len(readings) == 5
+
+    cpu_temp = next(r for r in readings if r.label == "CPU (Tctl/Tdie)")
+    assert cpu_temp.value == 64.25
+    assert cpu_temp.sensor_name.startswith("CPU [#0]")
+    assert cpu_temp.triple == (0xF0000100, 0, 2)
+    assert cpu_temp.unit == "\xb0C"
+
+    assert next(r for r in readings if r.label == "CPU Fan").value == 1180.0
+    gpu_load = next(r for r in readings if r.label == "GPU Core Load")
+    assert gpu_load.value == 8.0
+    assert gpu_load.sensor_name.startswith("GPU [#0]")
+    return readings
+
+
+def test_parses_v2_layout():
+    """The block HWiNFO 8.x actually publishes: 460-byte rows, 392-byte sensors.
+
+    Guards the failure that shipped in v1.0.0 — the larger rows were parsed with
+    the 4-byte-padded prefix, which reads every value one field late. Labels sit
+    before the values, so the channels looked perfectly healthy in ATLAS while
+    every trace was flat zero.
+    """
+    payload = build_block(SENSORS, READINGS, layout="v2")
+    shm, reader = _reader_for(payload, "Local\\TestHWiNFO_v2")
+    try:
+        assert reader.header.version == 2
+        assert reader.header.reading_element_size == 460
+        assert reader.header.sensor_element_size == 392
+        _assert_readings_decode(reader)
+    finally:
+        reader.disconnect()
+        shm.close()
+
+
+def test_parses_classic_packed_layout():
+    payload = build_block(SENSORS, READINGS, layout="classic")
+    shm, reader = _reader_for(payload, "Local\\TestHWiNFO_classic")
+    try:
+        assert reader.header.reading_element_size == 316
+        _assert_readings_decode(reader)
+    finally:
+        reader.disconnect()
+        shm.close()
+
+
 def test_parses_aligned_layout():
-    shm, reader = _reader_for(build_block(SENSORS, READINGS), "Local\\TestHWiNFO_aligned")
+    """The padded layout the published C implies, kept as a fallback."""
+    payload = build_block(SENSORS, READINGS, layout="aligned")
+    shm, reader = _reader_for(payload, "Local\\TestHWiNFO_aligned")
     try:
-        readings = reader.discover()
-        assert len(readings) == 5
-        assert reader.header.version == 1
-
-        cpu_temp = next(r for r in readings if r.label == "CPU (Tctl/Tdie)")
-        assert cpu_temp.value == 64.25
-        assert cpu_temp.sensor_name.startswith("CPU [#0]")
-        assert cpu_temp.triple == (0xF0000100, 0, 2)
-        assert cpu_temp.unit == "\xb0C"
-
-        gpu_load = next(r for r in readings if r.label == "GPU Core Load")
-        assert gpu_load.value == 8.0
-        assert gpu_load.sensor_name.startswith("GPU [#0]")
+        assert reader.header.reading_element_size == 320
+        _assert_readings_decode(reader)
     finally:
         reader.disconnect()
         shm.close()
 
 
-def test_parses_packed_layout():
-    """A build without the alignment padding must still read correctly."""
-    payload = build_block(SENSORS, READINGS, aligned=False)
-    shm, reader = _reader_for(payload, "Local\\TestHWiNFO_packed")
-    try:
-        readings = reader.discover()
-        assert len(readings) == 5
-        assert next(r for r in readings if r.label == "CPU Fan").value == 1180.0
-    finally:
-        reader.disconnect()
-        shm.close()
+def test_header_layout_chosen_by_table_adjacency():
+    """A header decoded with the wrong format must be rejected, not tolerated.
+
+    Both candidates can look individually plausible; only the correct one has the
+    sensor table ending exactly where the reading table starts.
+    """
+    for layout, expected_sensor_size in (("v2", 392), ("classic", 264), ("aligned", 264)):
+        shm, reader = _reader_for(
+            build_block(SENSORS, READINGS, layout=layout), f"Local\\TestHWiNFO_hdr_{layout}"
+        )
+        try:
+            header = reader.header
+            assert header.sensor_element_size == expected_sensor_size, layout
+            assert (
+                header.sensor_offset + header.sensor_element_size * header.sensor_count
+                == header.reading_offset
+            ), layout
+        finally:
+            reader.disconnect()
+            shm.close()
 
 
 def test_channels_track_readings_across_reorder():
@@ -254,7 +309,23 @@ def test_duplicate_labels_get_distinct_keys():
         channels = build_channels(reader.discover(), frequency=2)
         keys = [c.metric_key for c in channels]
         assert len(set(keys)) == 2
+        # No "_Fan_Fan" — the label already names the type, so a number is used.
         assert keys == ["CPU0_Fan", "CPU0_Fan_2"]
+    finally:
+        reader.disconnect()
+        shm.close()
+
+
+def test_same_label_on_different_reading_types_is_qualified():
+    """MSI boards label both a temperature and a fan header plain "CPU"."""
+    readings = [
+        (READING_TYPE_TEMP, 0, 20, "CPU", "\xb0C", 44.0),
+        (READING_TYPE_FAN, 0, 21, "CPU", "RPM", 1013.0),
+    ]
+    shm, reader = _reader_for(build_block(SENSORS[:1], readings), "Local\\TestHWiNFO_sametype")
+    try:
+        channels = build_channels(reader.discover(), frequency=2)
+        assert [c.metric_key for c in channels] == ["CPU0_CPU", "CPU0_CPU_Fan"]
     finally:
         reader.disconnect()
         shm.close()

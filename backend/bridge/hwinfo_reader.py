@@ -14,12 +14,20 @@ handled explicitly:
   obvious ``mmap`` route creates the section when it is absent, which turns "is
   HWiNFO running?" into "here are some zeroes".
 
-* **Struct layout varies.** The published C structs use natural alignment, so
-  ``poll_time`` and the four ``double`` fields sit on 8-byte boundaries with
-  padding in front of them. The header is parsed by trying the aligned form
-  first and validating the result, and the reading layout is chosen from the
-  element size the header itself reports. Rows are always walked using that
-  element size, so a future HWiNFO that appends fields still reads correctly.
+* **Struct layout varies, and guessing it wrong fails silently.** HWiNFO packs
+  these structs — there is no alignment padding, despite what the natural
+  reading of the published C would suggest. HWiNFO 8.x publishes a "v2" block
+  whose rows are larger than the classic ones (460-byte readings, 392-byte
+  sensors against 316 and 264) because a UTF-8 copy of the label and unit is
+  appended after the values; the leading fields are unchanged. Critically, the
+  labels sit *before* the value doubles, so a mis-picked layout still produces
+  perfectly good channel names attached to garbage — reading a double four
+  bytes late lands on a denormal that formats as 0.0 rather than raising. Both
+  the header and row layouts are therefore chosen by decoding candidates and
+  checking the result: the header against a structural invariant, the rows
+  against whether the values decode to plausible numbers. Rows are always
+  walked using the element size the header reports, so a future HWiNFO that
+  appends more fields still reads correctly.
 
 * **Row indices are not stable.** HWiNFO renumbers rows whenever sensors come
   and go — a drive spinning up, a GPU waking from idle, a fan controller
@@ -28,6 +36,7 @@ handled explicitly:
   rebuilt whenever a lookup no longer agrees.
 """
 import logging
+import math
 import platform
 import socket
 import struct
@@ -44,17 +53,22 @@ SHARED_MEM_NAME = "Global\\HWiNFO_SENS_SM2"
 SIGNATURE = 0x53695748  # "HWiS" as a little-endian DWORD
 
 # Header: signature, version, revision, poll_time, then the two table descriptors.
-# MSVC aligns the 8-byte poll_time, leaving 4 bytes of padding after dwRevision.
+# Packed is what HWiNFO actually publishes; the aligned variant (4 bytes of
+# padding before the 8-byte poll_time) is kept only as a fallback.
+_HEADER_PACKED = "<IIIqIIIIII"     # 44 bytes
 _HEADER_ALIGNED = "<III4xqIIIIII"  # 48 bytes
-_HEADER_PACKED = "<IIIqIIIIII"     # 44 bytes — fallback only
+_HEADER_CANDIDATES = (_HEADER_PACKED, _HEADER_ALIGNED)
 
-# Sensor rows contain no 8-byte members, so both layouts agree at 264 bytes.
+# Sensor rows: id, instance, then the original and user-facing names. HWiNFO 8.x
+# appends a third 128-byte UTF-8 name, taking the row to 392 bytes, but the
+# leading fields are unchanged and the row is walked by the header's size.
 _SENSOR_FMT = "<II128s128s"
 
-# Reading rows: under natural alignment 4 bytes of padding land before the
-# doubles, giving 320 bytes against the packed form's 316.
-_READING_ALIGNED = "<III128s128s16s4xdddd"  # 320 bytes
+# Reading rows: the same story — HWiNFO 8.x appends a UTF-8 label and unit after
+# the values (460 bytes against the classic 316), leaving this prefix intact.
 _READING_PACKED = "<III128s128s16sdddd"     # 316 bytes
+_READING_ALIGNED = "<III128s128s16s4xdddd"  # 320 bytes
+_READING_CANDIDATES = (_READING_PACKED, _READING_ALIGNED)
 
 READING_TYPE_NONE = 0
 READING_TYPE_TEMP = 1
@@ -144,6 +158,17 @@ def _cstr(raw: bytes) -> str:
     return raw.split(b"\0", 1)[0].decode("latin-1", "replace").strip()
 
 
+def _is_plausible_value(value: float) -> bool:
+    """Does this look like a sensor reading rather than a mis-aligned decode?
+
+    Reading the doubles at the wrong offset typically lands on a denormal
+    (~1e-317) or a NaN, neither of which any real sensor reports.
+    """
+    if not math.isfinite(value):
+        return False
+    return value == 0.0 or 1e-6 <= abs(value) <= 1e12
+
+
 class HwinfoReader:
     def __init__(self, shared_mem_name: str = SHARED_MEM_NAME) -> None:
         self._shared_mem_name = shared_mem_name
@@ -224,15 +249,12 @@ class HwinfoReader:
             raise
 
         size = self._header.reading_element_size
-        if size >= struct.calcsize(_READING_ALIGNED):
-            self._reading_fmt = _READING_ALIGNED
-        elif size >= struct.calcsize(_READING_PACKED):
-            self._reading_fmt = _READING_PACKED
-        else:
+        if size < struct.calcsize(_READING_PACKED):
             self._close()
             raise HwinfoUnavailable(
                 f"Reading element size {size} is smaller than any known layout"
             )
+        self._reading_fmt = self._detect_reading_layout(self._header)
         # Byte offset of the Value double inside a reading row, for the fast path.
         self._value_offset = struct.calcsize(self._reading_fmt) - 4 * 8
 
@@ -278,7 +300,8 @@ class HwinfoReader:
         if view is None:
             raise HwinfoUnavailable("Shared memory is not open")
 
-        for fmt in (_HEADER_ALIGNED, _HEADER_PACKED):
+        plausible: list[SharedMemHeader] = []
+        for fmt in _HEADER_CANDIDATES:
             size = struct.calcsize(fmt)
             if view.size < size:
                 continue
@@ -294,13 +317,63 @@ class HwinfoReader:
                 reading_element_size=fields[8],
                 reading_count=fields[9],
             )
-            if fields[0] == SIGNATURE and self._header_is_sane(header, size, view.size):
+            if fields[0] != SIGNATURE or not self._header_is_sane(header, size, view.size):
+                continue
+            # The two tables are laid out back to back, so a correct decode has
+            # the sensor table ending exactly where the reading table begins.
+            # A layout guessed wrong shifts every field by one and fails this.
+            if header.sensor_offset + header.sensor_element_size * header.sensor_count == header.reading_offset:
                 return header
+            plausible.append(header)
+
+        if plausible:
+            logger.warning(
+                "No HWiNFO header layout satisfied the table-adjacency check; "
+                "falling back to the first that looked sane"
+            )
+            return plausible[0]
 
         raise HwinfoUnavailable(
             "Shared memory block did not match any known HWiNFO layout "
             "(bad signature or implausible table descriptors)"
         )
+
+    def _detect_reading_layout(self, header: SharedMemHeader) -> str:
+        """Choose the row format whose value fields decode to real numbers.
+
+        Both known element sizes share the packed prefix, so packed is the
+        expected answer. This is checked rather than assumed because getting it
+        wrong is silent: the doubles sit after the labels, so a four-byte shift
+        yields correct channel names alongside denormals that print as 0.0.
+        """
+        best_fmt, best_score = _READING_PACKED, None
+        sample = min(header.reading_count, 64)
+
+        for fmt in _READING_CANDIDATES:
+            size = struct.calcsize(fmt)
+            if size > header.reading_element_size:
+                continue
+            value_offset = size - 4 * 8
+            # Zeros score nothing rather than counting as a hit: reading a padded
+            # row at the unpadded offset returns the padding plus the low half of
+            # the value, which for most readings is all zero and would otherwise
+            # look like a flawless decode.
+            score = 0
+            for i in range(sample):
+                base = header.reading_offset + i * header.reading_element_size
+                (value,) = struct.unpack("<d", self._read(base + value_offset, 8))
+                if not _is_plausible_value(value):
+                    score -= 1
+                elif value != 0.0:
+                    score += 1
+            if best_score is None or score > best_score:
+                best_fmt, best_score = fmt, score
+
+        logger.info(
+            "HWiNFO reading layout: %d-byte prefix in a %d-byte row (%d/%d sample values plausible)",
+            struct.calcsize(best_fmt), header.reading_element_size, best_score, sample,
+        )
+        return best_fmt
 
     @staticmethod
     def _header_is_sane(header: SharedMemHeader, header_size: int, view_size: int) -> bool:

@@ -177,10 +177,19 @@ def build_channels(readings: list[HwinfoReading], frequency: int = 2) -> list[Ch
 
         base_key = f"{_sensor_slug(reading.sensor_name)}_{_slug(label)[:48]}"
         key = base_key
-        suffix = 2
-        while key in used_keys:
-            key = f"{base_key}_{suffix}"
-            suffix += 1
+        if key in used_keys:
+            # Boards routinely label a temperature and a fan header identically
+            # ("CPU" on MSI), so qualify by reading type — "..._CPU_Fan" says far
+            # more in ATLAS than "..._CPU_2". Skipped when the label already names
+            # the type, which would only produce "..._Fan_Fan".
+            stem = base_key
+            if reading.type_name.lower() not in label.lower():
+                stem = f"{base_key}_{reading.type_name}"
+            key = stem
+            suffix = 2
+            while key in used_keys:
+                key = f"{stem}_{suffix}"
+                suffix += 1
         used_keys.add(key)
 
         description = f"{reading.sensor_name} - {label}"
@@ -258,8 +267,14 @@ def _by_type(channels: list[ChannelDef], reading_type: int) -> list[ChannelDef]:
     return [c for c in channels if c.reading_type == reading_type]
 
 
-# Ordered label matchers for the 'essential' preset. Each contributes at most
-# one channel, so the preset stays small on machines with rich sensor trees.
+# Ordered label matchers for the 'essential' preset. Each contributes at most one
+# channel, so the preset stays small on machines with rich sensor trees.
+#
+# Vendors name the same quantity quite differently — AMD reports "GPU ASIC Power"
+# where NVIDIA reports "GPU Power", and MSI labels its CPU fan header plain "CPU"
+# rather than "CPU Fan" — so these patterns carry the known variants. Where a
+# sensor reports both an aggregate and its parts, the aggregate is matched first
+# ("GPU ASIC Power" ahead of "GPU Core Power").
 _ESSENTIAL_MATCHERS: list[tuple[re.Pattern, int | None]] = [
     (re.compile(r"^total cpu usage$|^cpu utility$", re.I), READING_TYPE_USAGE),
     (re.compile(r"cpu \(tctl|^cpu package$|^core max$|^cpu temperature$", re.I), READING_TYPE_TEMP),
@@ -267,12 +282,18 @@ _ESSENTIAL_MATCHERS: list[tuple[re.Pattern, int | None]] = [
     (re.compile(r"average effective clock|^cpu clock$|^core 0 clock$", re.I), READING_TYPE_CLOCK),
     (re.compile(r"gpu core load|gpu utilization|^gpu load$", re.I), READING_TYPE_USAGE),
     (re.compile(r"^gpu temperature$|gpu hot ?spot", re.I), READING_TYPE_TEMP),
-    (re.compile(r"gpu power|total graphics power|gpu ppt", re.I), READING_TYPE_POWER),
-    (re.compile(r"gpu clock|gpu core clock", re.I), READING_TYPE_CLOCK),
-    (re.compile(r"gpu memory (used|allocated)", re.I), None),
+    (
+        re.compile(
+            r"gpu (?:asic|board|total|package) power|total graphics power|^gpu power$|gpu ppt",
+            re.I,
+        ),
+        READING_TYPE_POWER,
+    ),
+    (re.compile(r"^gpu clock$|gpu core clock", re.I), READING_TYPE_CLOCK),
+    (re.compile(r"^gpu memory (?:usage|used|allocated)$|dedicated video memory", re.I), None),
     (re.compile(r"^physical memory (used|load)$|^memory usage$", re.I), None),
     (re.compile(r"^virtual memory (used|load|committed)$", re.I), None),
-    (re.compile(r"cpu fan|^fan1$", re.I), READING_TYPE_FAN),
+    (re.compile(r"^cpu[ _-]?fan$|^cpu$|cpu.?fan|^fan\s*1$", re.I), READING_TYPE_FAN),
 ]
 
 

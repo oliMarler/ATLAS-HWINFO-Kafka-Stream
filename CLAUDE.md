@@ -77,8 +77,26 @@ Do **not** reach for `mmap.mmap(-1, size, tagname=...)`. On Windows that goes th
 ### 10. Reading Row Indices Are Not Stable
 HWiNFO renumbers rows whenever sensors come and go — a drive spinning up, a GPU leaving idle. Never key a channel by its row index. Channels are keyed by the `(dwSensorID, dwSensorInst, dwReadingID)` triple; `hwinfo_reader._sample_rows()` verifies the cached row still holds the expected reading on every sample and forces a re-scan when it does not.
 
-### 11. Two Struct Layouts Exist
-The published C structs use natural alignment: 4 bytes of padding after `dwRevision` (48-byte header) and 4 more before the `double` fields (320-byte reading row). A packed build would give 44 and 316. `hwinfo_reader.py` tries the aligned header first and validates the result, then picks the reading layout from the element size the header itself reports, and always walks rows using that reported size — so a future HWiNFO that appends fields still reads correctly. `backend/tests/test_hwinfo_reader.py` covers both layouts against a synthetic block, so HWiNFO does not need to be running to test parsing.
+### 11. The Struct Layout Is Detected, Never Assumed — Getting It Wrong Fails Silently
+**HWiNFO packs these structs. There is no alignment padding**, despite what a natural reading of the published C implies. Verified against HWiNFO 8.24 on the dev machine.
+
+HWiNFO 8.x publishes a **"v2" block** (`dwVersion=2`) with larger rows than the classic documentation describes, because a UTF-8 copy of each string is appended *after* the existing fields:
+
+| | classic | v2 (HWiNFO 8.x) | layout |
+|---|---|---|---|
+| header | 44 | 44 | `<IIIqIIIIII` |
+| sensor row | 264 | **392** | `<II128s128s` + UTF-8 `128s` |
+| reading row | 316 | **460** | `<III128s128s16sdddd` + UTF-8 `128s16s` |
+
+Within a v2 reading row: label at 12 and 140, unit at 268, and **value/min/max/avg at 284/292/300/308**.
+
+**Why this needs detecting rather than assuming:** the labels sit *before* the values. Pick the wrong layout and every channel still gets a perfect name, correct units and a healthy-looking config packet — while every value decodes from four bytes off, landing on a denormal that formats as `0.0`. Nothing raises. This shipped in v1.0.0 and produced a full set of flat-zero traces in ATLAS.
+
+Two checks guard it, both in `hwinfo_reader.py`:
+- **Header** — candidates must satisfy `sensor_offset + sensor_element_size * sensor_count == reading_offset`. The tables are adjacent, so a layout guessed wrong shifts every field by one and fails this. The looser range checks alone are *not* enough; they let the wrong parse through on some machines.
+- **Rows** — `_detect_reading_layout()` decodes a sample of rows with each candidate and scores the values. **Zeros must score nothing**: reading a padded row at the unpadded offset returns padding plus the low half of the value, which is all-zero for most readings and would otherwise look like a flawless decode. Score non-zero plausible values, penalise NaN/denormals.
+
+Rows are always walked using the element size the header reports, so a future HWiNFO that appends further fields still reads correctly. `backend/tests/test_hwinfo_reader.py` covers all three layouts against synthetic blocks, so HWiNFO need not be running to test parsing.
 
 ### 12. HWiNFO's Poll Period Caps the Useful Sample Rate
 HWiNFO refreshes its sensors every 2000 ms by default, so sampling faster than 2 Hz just repeats values. Lower HWiNFO's own period (Settings > Sensors > Sensor polling period) before raising `sample_frequency_hz`. `HwinfoReader.poll_age_seconds()` exposes the staleness — the UI warns when it climbs past 30 s, which usually means HWiNFO stopped publishing.
