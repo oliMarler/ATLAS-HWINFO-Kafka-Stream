@@ -1,0 +1,14 @@
+# Line endings are settled here rather than left to each person's git config.
+#
+# Without this, one contributor whose git converts line endings and another whose
+# does not will produce commits where every line of a file reads as changed even
+# though nothing was really edited, which buries the real change.
+#
+# "text=auto" normalises to LF inside the repository while leaving each working
+# copy to follow that machine's own core.autocrlf preference — so nothing on disk
+# has to change, but everyone commits the same thing.
+* text=auto
+
+# Batch files are the exception: cmd.exe can misparse a .bat that uses LF alone,
+# so these keep CRLF in the working copy.
+*.bat text eol=crlf
