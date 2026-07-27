@@ -18,6 +18,15 @@ HWiNFO64 (Global\HWiNFO_SENS_SM2)
     → ATLAS Stream Recorder
 ```
 
+## Documentation
+
+- **[MANUAL.md](MANUAL.md)** — the full manual: HWiNFO setup, every preset and
+  control, how channels are named in ATLAS, the HTTP API, troubleshooting.
+- [GETTING_STARTED.md](GETTING_STARTED.md) — the short path from nothing to a
+  live trace.
+- [CLAUDE.md](CLAUDE.md) — implementation constraints and hard-won lessons, for
+  anyone changing the code.
+
 ## Requirements
 
 - **Windows** — HWiNFO's shared memory is a Windows section, accessed here via `OpenFileMappingW`
