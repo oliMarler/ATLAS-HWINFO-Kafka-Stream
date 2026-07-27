@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+logs/
+*.log
+.env
+.DS_Store
+Thumbs.db
+
+# Runtime-generated files
+backend/key.info
+backend/key.info.bak
+
+# IDE / tooling
+.claude/

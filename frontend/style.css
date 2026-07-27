@@ -1,0 +1,714 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1c1e;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: #303437;
+    border-bottom: 3px solid #ED6D20;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.logo-placeholder {
+    font-family: 'Roboto', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #ED6D20;
+}
+
+.header-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+header h1 {
+    font-size: 18px;
+    font-weight: 400;
+    color: #fff;
+}
+
+.version {
+    font-size: 12px;
+    color: #B1B3B3;
+}
+
+/* Main */
+main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px;
+    flex: 1;
+    width: 100%;
+}
+
+/* Status Bar */
+.status-bar {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    padding: 16px 20px;
+    background: #303437;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #555;
+    flex-shrink: 0;
+}
+
+.status-dot.connected {
+    background: #148E8E;
+    box-shadow: 0 0 8px rgba(20, 142, 142, 0.6);
+}
+
+.status-dot.waiting {
+    background: #ED6D20;
+    box-shadow: 0 0 8px rgba(237, 109, 32, 0.5);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.status-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #B1B3B3;
+}
+
+.status-text {
+    font-size: 13px;
+    color: #777;
+}
+
+.stats {
+    margin-left: auto;
+    gap: 16px;
+}
+
+.stat {
+    font-size: 13px;
+    color: #B1B3B3;
+    font-family: 'Roboto Mono', monospace;
+}
+
+/* Lap Info */
+.lap-info {
+    display: flex;
+    gap: 40px;
+    padding: 20px 24px;
+    background: #303437;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 3px solid #ED6D20;
+}
+
+.lap-current, .lap-time {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.lap-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #B1B3B3;
+}
+
+.lap-value {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: 'Roboto Mono', monospace;
+    color: #fff;
+}
+
+/* Config Section */
+.config-section {
+    background: #303437;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+
+.config-section h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #B1B3B3;
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.config-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.config-row label {
+    min-width: 180px;
+    font-size: 14px;
+    color: #ccc;
+}
+
+.config-row input,
+.config-row select {
+    flex: 1;
+    padding: 8px 12px;
+    background: #1a1c1e;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 14px;
+    font-family: 'Roboto', sans-serif;
+    transition: border-color 0.2s;
+}
+
+.config-row input:focus,
+.config-row select:focus {
+    outline: none;
+    border-color: #ED6D20;
+}
+
+.config-row select option {
+    background: #1a1c1e;
+}
+
+/* Channel Picker */
+.channel-picker {
+    margin-top: 16px;
+    border-top: 1px solid #444;
+    padding-top: 16px;
+}
+
+.channel-picker h3 {
+    font-size: 13px;
+    color: #B1B3B3;
+    margin-bottom: 12px;
+}
+
+.picker-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.picker-controls button {
+    padding: 4px 12px;
+    background: #1a1c1e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #B1B3B3;
+    font-size: 12px;
+    font-family: 'Roboto', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.picker-controls button:hover {
+    background: #444;
+    color: #fff;
+    border-color: #ED6D20;
+}
+
+.channel-group {
+    margin-bottom: 12px;
+}
+
+.channel-group-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: #B1B3B3;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.channel-group-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.channel-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: #1a1c1e;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.channel-checkbox:hover {
+    background: #444;
+}
+
+.channel-checkbox input {
+    accent-color: #ED6D20;
+}
+
+.channel-checkbox label {
+    cursor: pointer;
+    color: #ccc;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 11px;
+}
+
+/* Controls */
+.controls {
+    margin-bottom: 20px;
+}
+
+.btn-start {
+    width: 100%;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #ED6D20;
+    color: #fff;
+    font-family: 'Roboto', sans-serif;
+    letter-spacing: 0.5px;
+}
+
+.btn-start:hover {
+    background: #d45e18;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(237, 109, 32, 0.3);
+}
+
+.btn-start.running {
+    background: #148E8E;
+    color: #fff;
+}
+
+.btn-start.running:hover {
+    background: #117676;
+    box-shadow: 0 4px 16px rgba(20, 142, 142, 0.3);
+}
+
+.btn-start:disabled {
+    background: #444;
+    color: #777;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Analysis */
+.analysis-section {
+    background: #303437;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+
+.analysis-section h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #B1B3B3;
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.insight-item {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 8px;
+    border-left: 3px solid #555;
+    background: #1a1c1e;
+}
+
+.insight-item:last-child {
+    margin-bottom: 0;
+}
+
+.insight-item.info {
+    border-left-color: #148E8E;
+    color: #e0e0e0;
+}
+
+.insight-item.warning {
+    border-left-color: #ED6D20;
+    color: #f0c8a8;
+}
+
+.insight-item.critical {
+    border-left-color: #991b1b;
+    color: #fca5a5;
+}
+
+/* Telemetry Table */
+.telemetry-section {
+    background: #303437;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+
+.telemetry-section h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #B1B3B3;
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.telem-group {
+    margin-bottom: 16px;
+}
+
+.telem-group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #777;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #444;
+}
+
+.telem-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 4px;
+}
+
+.telem-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.telem-item:hover {
+    background: #3a3d40;
+}
+
+.telem-name {
+    font-size: 12px;
+    color: #B1B3B3;
+}
+
+.telem-value {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+    color: #ED6D20;
+    font-weight: 500;
+}
+
+/* Error Banner */
+.error-banner {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #7f1d1d;
+    border: 1px solid #991b1b;
+    border-radius: 8px;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 100;
+}
+
+#error-text {
+    font-size: 14px;
+    color: #fca5a5;
+}
+
+.error-banner button {
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid #991b1b;
+    border-radius: 4px;
+    color: #fca5a5;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Roboto', sans-serif;
+    transition: background 0.2s;
+}
+
+.error-banner button:hover {
+    background: #991b1b;
+}
+
+/* Footer */
+footer {
+    padding: 16px 24px;
+    background: #303437;
+    border-top: 1px solid #444;
+    text-align: center;
+    font-size: 13px;
+    color: #777;
+}
+
+footer a {
+    color: #ED6D20;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+footer a:hover {
+    color: #f08a4a;
+    text-decoration: underline;
+}
+
+/* HWiNFO unavailable notice */
+.notice {
+    background: #303437;
+    border-left: 3px solid #ED6D20;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+
+.notice h2 {
+    font-size: 15px;
+    font-weight: 500;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+.notice p {
+    font-size: 13px;
+    color: #B1B3B3;
+    margin-bottom: 12px;
+}
+
+.notice ol {
+    margin: 0 0 12px 20px;
+    font-size: 13px;
+    color: #ccc;
+    line-height: 1.9;
+}
+
+.notice strong {
+    color: #fff;
+    font-weight: 500;
+}
+
+.notice-footnote {
+    font-size: 12px;
+    color: #777;
+    font-style: italic;
+}
+
+.btn-secondary {
+    padding: 8px 20px;
+    background: #1a1c1e;
+    border: 1px solid #ED6D20;
+    border-radius: 6px;
+    color: #ED6D20;
+    font-size: 13px;
+    font-family: 'Roboto', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: #ED6D20;
+    color: #fff;
+}
+
+/* Preset hint */
+.config-hint {
+    font-size: 12px;
+    color: #777;
+    margin: -4px 0 4px 192px;
+    min-height: 16px;
+}
+
+/* Channel picker additions */
+.picker-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.picker-header h3 {
+    margin-bottom: 0;
+}
+
+.picker-count {
+    font-size: 12px;
+    font-family: 'Roboto Mono', monospace;
+    color: #ED6D20;
+}
+
+.picker-search {
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: #1a1c1e;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 13px;
+    font-family: 'Roboto', sans-serif;
+}
+
+.picker-search:focus {
+    outline: none;
+    border-color: #ED6D20;
+}
+
+.picker-warning {
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    border-left: 3px solid #ED6D20;
+    background: #1a1c1e;
+    font-size: 12px;
+    color: #f0c8a8;
+}
+
+.channel-group-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 0;
+}
+
+.group-caret {
+    color: #777;
+    font-size: 10px;
+    transition: transform 0.15s;
+}
+
+.channel-group.collapsed .group-caret {
+    transform: rotate(-90deg);
+}
+
+.channel-group.collapsed .channel-group-items {
+    display: none;
+}
+
+.group-name {
+    flex: 1;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #ccc;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.group-count {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 11px;
+    color: #777;
+    background: #1a1c1e;
+    border-radius: 10px;
+    padding: 1px 8px;
+}
+
+.group-select {
+    background: none;
+    border: none;
+    color: #777;
+    font-size: 11px;
+    font-family: 'Roboto', sans-serif;
+    cursor: pointer;
+    padding: 2px 4px;
+    text-transform: lowercase;
+}
+
+.group-select:hover {
+    color: #ED6D20;
+    text-decoration: underline;
+}
+
+.channel-group-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 2px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.channel-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px;
+    background: #1a1c1e;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.channel-label {
+    flex: 1;
+    color: #ccc;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.channel-value {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 11px;
+    color: #777;
+    flex-shrink: 0;
+}
+
+.telem-units {
+    color: #555;
+    font-size: 11px;
+}

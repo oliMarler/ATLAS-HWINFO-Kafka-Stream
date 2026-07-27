@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HWiNFO ATLAS Bridge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-left">
+        <div class="logo-placeholder" id="atlas-logo">ATLAS</div>
+        <div class="header-title">
+          <h1>HWiNFO Bridge</h1>
+          <span class="version">v1.0.0</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Status Bar -->
+      <section class="status-bar">
+        <div class="status-item">
+          <span class="status-dot" id="dot-source"></span>
+          <span class="status-label">HWiNFO</span>
+          <span class="status-text" id="status-source">Checking...</span>
+        </div>
+        <div class="status-item">
+          <span class="status-dot" id="dot-atlas"></span>
+          <span class="status-label">Stream API</span>
+          <span class="status-text" id="status-atlas">Disconnected</span>
+        </div>
+        <div class="status-item">
+          <span class="status-dot" id="dot-streaming"></span>
+          <span class="status-label">Streaming</span>
+          <span class="status-text" id="status-streaming">Stopped</span>
+        </div>
+        <div class="status-item stats">
+          <span class="stat" id="stat-channels">0 channels</span>
+          <span class="stat" id="stat-samples">0 samples</span>
+          <span class="stat" id="stat-elapsed">0:00</span>
+        </div>
+      </section>
+
+      <!-- HWiNFO unavailable notice -->
+      <section class="notice" id="hwinfo-notice" style="display: none">
+        <h2>HWiNFO is not publishing sensor data</h2>
+        <p id="hwinfo-error"></p>
+        <ol>
+          <li>Start <strong>HWiNFO64</strong> (Sensors-only mode is fine).</li>
+          <li>
+            Open <strong>Settings</strong> &rarr; <strong>Main Settings</strong> and tick
+            <strong>Shared Memory Support</strong>.
+          </li>
+          <li>Click <strong>Retry</strong> below.</li>
+        </ol>
+        <p class="notice-footnote">
+          On the free version, Shared Memory Support turns itself off again after 12
+          hours of runtime — restart HWiNFO to bring it back.
+        </p>
+        <button class="btn-secondary" onclick="refreshChannels()">Retry</button>
+      </section>
+
+      <!-- Configuration -->
+      <section class="config-section" id="config-section">
+        <h2>Configuration</h2>
+        <div class="config-row">
+          <label for="session-name">Session Name (optional)</label>
+          <input type="text" id="session-name" placeholder="Auto-generated from hostname" />
+        </div>
+        <div class="config-row">
+          <label for="preset">Channel Preset</label>
+          <select id="preset"></select>
+        </div>
+        <p class="config-hint" id="preset-hint"></p>
+
+        <!-- Custom channel picker -->
+        <div class="channel-picker" id="channel-picker" style="display: none">
+          <div class="picker-header">
+            <h3>Select Channels</h3>
+            <span class="picker-count" id="picker-count">0 selected</span>
+          </div>
+          <input
+            type="search"
+            id="channel-search"
+            class="picker-search"
+            placeholder="Filter by sensor, label or unit..."
+          />
+          <div class="picker-controls">
+            <button type="button" onclick="selectAllChannels()">Select All</button>
+            <button type="button" onclick="deselectAllChannels()">Deselect All</button>
+            <button type="button" onclick="selectVisibleChannels()">Select Filtered</button>
+            <button type="button" onclick="toggleAllGroups()">Expand / Collapse</button>
+            <button type="button" onclick="refreshChannels()">Rescan</button>
+          </div>
+          <div class="picker-warning" id="picker-warning" style="display: none"></div>
+          <div id="channel-groups"></div>
+        </div>
+      </section>
+
+      <!-- Controls -->
+      <section class="controls">
+        <button class="btn-start" id="btn-toggle" onclick="toggleBridge()">
+          Start Streaming
+        </button>
+      </section>
+
+      <!-- Analysis -->
+      <section class="analysis-section" id="analysis-section" style="display: none">
+        <h2>Analysis</h2>
+        <div id="analysis-list"></div>
+      </section>
+
+      <!-- Live Telemetry -->
+      <section class="telemetry-section" id="telemetry-section" style="display: none">
+        <h2>Live Telemetry</h2>
+        <div id="telemetry-table"></div>
+      </section>
+
+      <!-- Error Display -->
+      <div class="error-banner" id="error-banner" style="display: none">
+        <span id="error-text"></span>
+        <button onclick="dismissError()">Dismiss</button>
+      </div>
+    </main>
+
+    <footer>
+      <span>Powered by</span>
+      <a href="https://atlas.motionapplied.com/" target="_blank" rel="noopener">ATLAS</a>
+      <span>&middot; sensor data from</span>
+      <a href="https://www.hwinfo.com/" target="_blank" rel="noopener">HWiNFO</a>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
