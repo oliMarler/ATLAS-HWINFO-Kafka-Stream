@@ -8,6 +8,9 @@ from datetime import datetime
 from bridge.analysis import analyze
 from bridge.atlas_writer import AtlasWriter
 from bridge.channel_registry import ChannelDef, build_channels, resolve_channels
+from bridge.derived_channels import evaluate as evaluate_derived
+from bridge.derived_channels import load_specs as load_derived_specs
+from bridge.derived_channels import resolve as resolve_derived
 from bridge.hwinfo_reader import HwinfoReader, HwinfoUnavailable
 from bridge.sample_value import SampleValue
 from config import BridgeConfig
@@ -181,8 +184,19 @@ class BridgeEngine:
                 )
                 return
 
+            # Derived channels are computed from the resolved set's own values
+            # each tick, not read from HWiNFO — see derived_channels.py. A spec
+            # whose $-references aren't in this session's channels is skipped.
+            derived_specs = load_derived_specs()
+            derived_pairs = resolve_derived(
+                derived_specs, {ch.metric_key for ch in channels}, frequency
+            )
+            channels = channels + [ch for ch, _spec in derived_pairs]
+
             self._channels = channels
-            source.bind_channels(channels)
+            real_channels = [ch for ch in channels if not ch.is_derived]
+            source.bind_channels(real_channels)
+            real_keys = [ch.metric_key for ch in real_channels]
             keys = [ch.metric_key for ch in channels]
             with self._lock:
                 self._status.active_channels = keys
@@ -223,7 +237,20 @@ class BridgeEngine:
                         break
 
                     loop_start = time.time()
-                    telemetry = source.read_telemetry(keys).parameter_values
+                    telemetry = source.read_telemetry(real_keys).parameter_values
+
+                    if derived_pairs:
+                        values = {
+                            k: (v.value if v.value is not None else 0.0)
+                            for k, v in telemetry.items()
+                        }
+                        for derived_ch, spec in derived_pairs:
+                            result = evaluate_derived(spec, values)
+                            values[derived_ch.metric_key] = result
+                            telemetry[derived_ch.metric_key] = SampleValue(
+                                self._next_timestamp_ns, derived_ch.metric_key, result
+                            )
+
                     last_telemetry = telemetry
 
                     for k in keys:

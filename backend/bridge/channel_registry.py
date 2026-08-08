@@ -55,6 +55,10 @@ class ChannelDef:
     reading_type: int = READING_TYPE_OTHER
     label: str = ""
     sensor_name: str = ""
+    # True for channels computed by derived_channels.py rather than read from
+    # HWiNFO — the sensor/reading fields above are meaningless for these, so
+    # bridge_engine must not hand them to HwinfoReader.bind_channels().
+    is_derived: bool = False
 
 
 # --- naming ---------------------------------------------------------------
