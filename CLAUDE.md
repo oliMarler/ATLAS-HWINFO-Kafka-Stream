@@ -104,16 +104,38 @@ HWiNFO refreshes its sensors every 2000 ms by default, so sampling faster than 2
 ### 13. Shared Memory Support Is a Prerequisite, and Expires on Free Builds
 `Settings > Main Settings > Shared Memory Support` must be ticked, and HWiNFO must be running (Sensors-only mode is fine). On the **free** version this feature stops after 12 hours of runtime and needs an HWiNFO restart; the Pro licence removes the limit. Losing the section mid-session is handled gracefully — samples read as `None` (sent as `0.0`) and the reader retries — it does not tear down the ATLAS session.
 
+## Derived Channels
+Additional ATLAS parameters computed from other channels' values, rather than read from HWiNFO directly — e.g. a Fahrenheit conversion or a headroom calculation over a temperature channel. Defined in `configs/derived_channels.json`, no Python required to add one:
+```json
+{
+  "metric_key": "CPU0_Tctl_F",
+  "formula": "$CPU0_CPUTctlTdie * 1.8 + 32",
+  "units": "F",
+  "description": "CPU Tctl/Tdie in Fahrenheit",
+  "min_value": 32,
+  "max_value": 250,
+  "format_string": "%5.1f"
+}
+```
+- `$Name` references another channel's `metric_key` (real or, if listed earlier in the file, another derived channel).
+- Formulas are parsed as **Python expressions** after substituting `$Name` → `Name` — arithmetic, comparison, boolean (`and`/`or`/`not`), and a conditional (`a if cond else b`) are supported, `**` for power. This is inspired by ATLAS's own FDL function syntax but is not FDL: only the single-expression subset applies, since a derived channel is one scalar per sample, not a multi-statement function with loops.
+- Every formula is validated against an AST whitelist at load time — no calls, attribute access, subscripting, comprehensions or lambdas — so a formula can only combine numbers and `$`-references with operators.
+- A derived channel whose `$`-references aren't in the session's resolved channel set is skipped silently (e.g. no CPU temp sensor on this machine), same as the built-in presets when a category is empty.
+- Computed once per sample tick in `bridge_engine.py`, from that tick's already-sampled real values — no extra HWiNFO reads, no separate timing path. It rides the same `ConfigurationPacket`/`PeriodicDataPacket` machinery as every other channel, so it's a real recorded channel, not a display-time calculation.
+
 ## Key Files
 - `backend/bridge/shared_memory.py` — `OpenFileMappingW`/`MapViewOfFile` wrapper for read-only access to an existing named section
 - `backend/bridge/hwinfo_reader.py` — parses HWiNFO's sensor/reading tables, stable-triple keying, fast per-sample row reads, reconnect handling
 - `backend/bridge/channel_registry.py` — `ChannelDef`, `build_channels()`, naming/unit/range derivation, preset predicates
+- `backend/bridge/derived_channels.py` — formula compiler/evaluator for `configs/derived_channels.json` (see Derived Channels above)
 - `backend/bridge/atlas_writer.py` — gRPC client to Stream API (session lifecycle, config, data) — reused as-is across bridge variants apart from the group literal
 - `backend/bridge/bridge_engine.py` — orchestrates reader → writer, discovers channels post-connect, batching and contiguous timing
 - `backend/bridge/analysis.py` — findings from HWiNFO's own throttle/limit flags plus threshold checks
 - `backend/api/routes.py` — FastAPI endpoints: start/stop/status/config, live `/channels` discovery, `/hwinfo/status`
 - `backend/tests/test_hwinfo_reader.py` — synthetic shared-memory tests, runnable with `py backend/tests/test_hwinfo_reader.py`
+- `backend/tests/test_derived_channels.py` — formula compiler/evaluator tests, runnable with `py backend/tests/test_derived_channels.py`
 - `configs/AppConfig.json` — Stream API configuration (broker URL, domain, partitions)
+- `configs/derived_channels.json` — derived channel formulas, hand-edited to add new calculations
 - `docker-compose.yml` — Kafka, Stream API, Key Generator, Kafka UI
 - `scripts/start.bat` — Windows startup script (Docker + backend)
 

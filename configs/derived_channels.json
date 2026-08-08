@@ -1,0 +1,11 @@
+[
+  {
+    "metric_key": "CPU0_Tctl_F",
+    "formula": "$CPU0_CPUTctlTdie * 1.8 + 32",
+    "units": "F",
+    "description": "CPU Tctl/Tdie in Fahrenheit",
+    "min_value": 32,
+    "max_value": 250,
+    "format_string": "%5.1f"
+  }
+]
