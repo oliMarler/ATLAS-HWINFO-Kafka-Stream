@@ -1,7 +1,7 @@
 # ATLAS HWiNFO Kafka Stream
 
 Stream live hardware sensor data from [HWiNFO](https://www.hwinfo.com/) into
-[McLaren ATLAS](https://atlas.motionapplied.com/), via Kafka and the MA Data
+[Motion Applied ATLAS](https://atlas.motionapplied.com/), via Kafka and the MA Data
 Platforms Stream API.
 
 HWiNFO exposes several hundred readings on a typical machine — per-core clocks
