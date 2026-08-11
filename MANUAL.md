@@ -317,6 +317,31 @@ below a throttle point, a delta between two related sensors, a 0/1 flag for
 `PeriodicDataPacket` machinery as every other channel, so they are real
 recorded channels in ATLAS, not something computed after the fact.
 
+### Not an ATLAS Function — this runs independently of ATLAS
+
+ATLAS has its own calculated-value mechanism, **FDL Functions**, written in
+ATLAS's Function Editor. Derived channels are a deliberately different thing:
+the calculation happens **in the bridge, before the value is ever sent**, so
+it does not depend on ATLAS at all. Concretely:
+
+- The bridge's own status endpoint (§13) reports derived-channel values in
+  `current_values` exactly like real channels, live in the bridge UI at
+  <http://localhost:8888> with no ATLAS Stream Recorder connected.
+- The value is on the wire as a genuine `PeriodicDataPacket` on
+  `Default.Stream1`, inspectable in the Kafka UI (§9) whether or not anything
+  is consuming it downstream.
+- Because the calculation is already done by the time the value reaches
+  Kafka, any other consumer of that topic gets the derived value for free —
+  it never has to know the formula, or run ATLAS at all.
+
+The trade-off is the reverse of an ATLAS Function: a derived channel is fixed
+for the life of a session (§17) and needs a bridge restart to add or change,
+where an ATLAS Function can be edited and rebuilt against already-recorded
+data without re-streaming anything. Use an ATLAS Function for a one-off,
+display-time calculation over a session you already have; use a derived
+channel when the calculated value needs to exist independently of ATLAS, or
+needs to be visible to any other Kafka consumer.
+
 ### Adding one
 
 Edit `configs/derived_channels.json` — no code changes needed. Each entry:

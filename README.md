@@ -108,6 +108,14 @@ load time so a formula can only combine numbers and `$`-references. See
 [MANUAL.md §8](MANUAL.md#8-derived-channels) for the full syntax rules and how
 this interacts with channel presets.
 
+This is deliberately not the same thing as an ATLAS FDL Function — the
+calculation runs **in the bridge**, before the value is ever sent, so it does
+not depend on ATLAS at all. The result shows up in the bridge's own
+`GET /api/status` → `current_values` and as a real Kafka packet on
+`Default.Stream1`, so any downstream consumer gets the calculated value
+without knowing the formula or running ATLAS — see
+[MANUAL.md §8](MANUAL.md#8-derived-channels) for details.
+
 ## Sample rate
 
 The default is 2 Hz, matching HWiNFO's own 2000 ms sensor polling period.
