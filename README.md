@@ -81,6 +81,33 @@ ATLAS registers each parameter with its own gRPC round-trip, so session start
 scales with channel count — the UI warns past 250. `full` on a well-instrumented
 board can mean a noticeable wait before data starts flowing.
 
+## Derived channels
+
+Beyond what HWiNFO reports directly, the bridge can stream **calculated**
+channels — a Fahrenheit conversion, a headroom margin below a throttle point,
+a delta between two sensors, a threshold flag — computed each tick from other
+channels' already-sampled values. No code required: edit
+`configs/derived_channels.json`, e.g.
+
+```json
+{
+  "metric_key": "CPU0_Tctl_F",
+  "formula": "$CPU0_CPUTctlTdie * 1.8 + 32",
+  "units": "F",
+  "description": "CPU Tctl/Tdie in Fahrenheit",
+  "min_value": 32,
+  "max_value": 250,
+  "format_string": "%5.1f"
+}
+```
+
+`$Name` references another channel (real, or an earlier derived one).
+Formulas are a restricted, whitelisted expression subset — arithmetic,
+comparison, boolean logic, an `a if cond else b` conditional — validated at
+load time so a formula can only combine numbers and `$`-references. See
+[MANUAL.md §8](MANUAL.md#8-derived-channels) for the full syntax rules and how
+this interacts with channel presets.
+
 ## Sample rate
 
 The default is 2 Hz, matching HWiNFO's own 2000 ms sensor polling period.
@@ -101,6 +128,13 @@ py backend/tests/test_hwinfo_reader.py
 
 Covers both struct layouts, unit and naming derivation, preset selection,
 duplicate labels, a missing section, and sensors being added mid-session.
+
+Derived-channel formulas (see above) are tested the same way, against
+synthetic config files:
+
+```bash
+py backend/tests/test_derived_channels.py
+```
 
 ## Ports
 

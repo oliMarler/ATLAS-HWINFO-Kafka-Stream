@@ -13,15 +13,16 @@ Version 1.0.1
 5. [The bridge interface](#5-the-bridge-interface)
 6. [Choosing channels](#6-choosing-channels)
 7. [How channels appear in ATLAS](#7-how-channels-appear-in-atlas)
-8. [Connecting the ATLAS Stream Recorder](#8-connecting-the-atlas-stream-recorder)
-9. [Sample rate and timing](#9-sample-rate-and-timing)
-10. [The analysis panel](#10-the-analysis-panel)
-11. [Configuration reference](#11-configuration-reference)
-12. [HTTP API reference](#12-http-api-reference)
-13. [Troubleshooting](#13-troubleshooting)
-14. [How it works](#14-how-it-works)
-15. [Running the tests](#15-running-the-tests)
-16. [Known limits](#16-known-limits)
+8. [Derived channels](#8-derived-channels)
+9. [Connecting the ATLAS Stream Recorder](#9-connecting-the-atlas-stream-recorder)
+10. [Sample rate and timing](#10-sample-rate-and-timing)
+11. [The analysis panel](#11-the-analysis-panel)
+12. [Configuration reference](#12-configuration-reference)
+13. [HTTP API reference](#13-http-api-reference)
+14. [Troubleshooting](#14-troubleshooting)
+15. [How it works](#15-how-it-works)
+16. [Running the tests](#16-running-the-tests)
+17. [Known limits](#17-known-limits)
 
 ---
 
@@ -306,7 +307,62 @@ there if a channel needs a tighter range.
 
 ---
 
-## 8. Connecting the ATLAS Stream Recorder
+## 8. Derived channels
+
+Beyond what HWiNFO reports directly, the bridge can stream **calculated**
+channels — values computed from other channels' already-sampled readings each
+tick, rather than read from HWiNFO. A Fahrenheit conversion, a headroom margin
+below a throttle point, a delta between two related sensors, a 0/1 flag for
+"is this over threshold" — these ride the same `ConfigurationPacket` /
+`PeriodicDataPacket` machinery as every other channel, so they are real
+recorded channels in ATLAS, not something computed after the fact.
+
+### Adding one
+
+Edit `configs/derived_channels.json` — no code changes needed. Each entry:
+
+```json
+{
+  "metric_key": "CPU0_Tctl_F",
+  "formula": "$CPU0_CPUTctlTdie * 1.8 + 32",
+  "units": "F",
+  "description": "CPU Tctl/Tdie in Fahrenheit",
+  "min_value": 32,
+  "max_value": 250,
+  "format_string": "%5.1f"
+}
+```
+
+- `$Name` in a formula references another channel's `metric_key` — a real one,
+  or an earlier entry in the same file (derived channels can chain).
+- Formulas are arithmetic, comparison, boolean (`and`/`or`/`not`) and a
+  conditional (`a if cond else b`), written as Python expression syntax after
+  substituting `$Name` → `Name`. `**` is power, not FDL's `^`. Every formula is
+  checked against a strict whitelist when the bridge starts — no function
+  calls, attribute access, subscripting or lambdas — so a formula can only
+  combine numbers and `$`-references with operators.
+- `units`, `description`, `min_value`, `max_value` and `format_string` behave
+  exactly as they do for a real channel — they set the ATLAS parameter
+  definition and default axis scaling.
+
+### When a derived channel activates
+
+A derived channel needs every `$`-reference it uses to be part of **the
+current session's selected channels** — not just present somewhere on the
+machine. Picking the `essential` preset when a formula references a channel
+only present in `full` means that derived channel is silently skipped for
+this session, the same way an empty preset category is skipped. Switch to a
+preset (or custom selection) that includes the channels a formula depends on,
+or use `full`, if you want it to activate.
+
+A missing reference is never an error — check `GET /api/channels` (§13) for
+the exact live `metric_key` names on your machine before writing a formula
+against them, since naming depends on your CPU/GPU/board and how HWiNFO
+labels each reading.
+
+---
+
+## 9. Connecting the ATLAS Stream Recorder
 
 1. Open **ATLAS 10**.
 2. Open the **Stream Recorder**.
@@ -322,14 +378,14 @@ confirm packets are arriving.
 
 ---
 
-## 9. Sample rate and timing
+## 10. Sample rate and timing
 
 The default is **2 Hz**, matching HWiNFO's default 2000 ms sensor polling period.
 
 **Sampling faster than HWiNFO polls does not give more resolution** — it repeats
 the same value. To genuinely sample faster, lower HWiNFO's own period first:
 **Settings → Sensors → Sensor polling period**. Then raise the bridge rate (see
-§11). Be aware that a low HWiNFO polling period increases its own CPU use and,
+§12). Be aware that a low HWiNFO polling period increases its own CPU use and,
 on some boards, contends with the Super-I/O chip.
 
 Timestamps are contiguous by construction: each batch starts exactly where the
@@ -341,7 +397,7 @@ The interface shows how long ago HWiNFO last refreshed its block, and warns past
 
 ---
 
-## 10. The analysis panel
+## 11. The analysis panel
 
 While streaming, plain-English findings appear above the live values. They come
 from two sources.
@@ -372,7 +428,7 @@ the traces.
 
 ---
 
-## 11. Configuration reference
+## 12. Configuration reference
 
 ### Bridge settings — `backend/config.py`
 
@@ -382,10 +438,10 @@ the traces.
 | `key_generator_address` | `localhost:15379` | Supplies unique session and config IDs |
 | `data_source` | `Default` | First element of the Kafka topic name |
 | `stream` | `Stream1` | Data stream name |
-| `sample_frequency_hz` | `2` | See §9 before raising |
+| `sample_frequency_hz` | `2` | See §10 before raising |
 | `default_preset` | `essential` | |
 
-Several of these can be changed at runtime via `PUT /api/config` (§12) without
+Several of these can be changed at runtime via `PUT /api/config` (§13) without
 editing the file. `sample_frequency_hz` is clamped to 1–20.
 
 ### Stream API — `configs/AppConfig.json`
@@ -412,7 +468,7 @@ so **only one such stack can run at a time**.
 
 ---
 
-## 12. HTTP API reference
+## 13. HTTP API reference
 
 All endpoints are under `/api` on port 8888. The interface uses these, and they
 are equally usable for scripting.
@@ -464,7 +520,7 @@ and `sample_frequency_hz`. Changes apply to the next session.
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### "Could not read HWiNFO's shared memory"
 
@@ -479,7 +535,7 @@ Docker Desktop is not running, or the containers have not finished starting. Run
 
 ### Session starts, but nothing appears in ATLAS
 
-Check the **Domain field is empty** in the Stream Recorder (§8). Then open the
+Check the **Domain field is empty** in the Stream Recorder (§9). Then open the
 Kafka UI at <http://localhost:8080> and confirm packets are arriving on
 `Default.Stream1`. If they are, the problem is on the ATLAS side; if not, check
 the bridge log.
@@ -507,7 +563,7 @@ HWiNFO itself before assuming a fault.
 ### Traces are flat or stepped
 
 The bridge is sampling faster than HWiNFO refreshes. Lower the sample rate, or
-lower HWiNFO's polling period — see §9.
+lower HWiNFO's polling period — see §10.
 
 ### Values stop updating mid-session
 
@@ -539,7 +595,7 @@ up new sensors.
 
 ---
 
-## 14. How it works
+## 15. How it works
 
 ### Reading HWiNFO
 
@@ -586,7 +642,7 @@ For the full set of hard-won constraints, see `CLAUDE.md` in the repository root
 
 ---
 
-## 15. Running the tests
+## 16. Running the tests
 
 The shared-memory parsing and engine timing are tested against synthetic blocks,
 so HWiNFO does not need to be running:
@@ -603,11 +659,22 @@ Between them these cover all three known block layouts, header selection, channe
 naming and unit normalisation, preset selection, duplicate labels, sensors
 appearing mid-session, a missing section, batch contiguity and the sample counter.
 
-Both files are pytest-compatible and also run standalone as above.
+Derived-channel formulas (§8) are tested the same way, against synthetic config
+files rather than the shipped `configs/derived_channels.json`:
+
+```bash
+py backend/tests/test_derived_channels.py
+```
+
+Covers formula compilation, the AST safety whitelist rejecting calls/attribute
+access/comprehensions/lambdas, evaluation, missing-reference handling, and
+chaining one derived channel onto another.
+
+All three files are pytest-compatible and also run standalone as above.
 
 ---
 
-## 16. Known limits
+## 17. Known limits
 
 - **Windows only.** The shared-memory interface is Windows-specific.
 - **The channel set is fixed per session.** ATLAS receives one configuration
@@ -620,3 +687,6 @@ Both files are pytest-compatible and also run standalone as above.
 - **Only one bridge stack at a time**, since ports are shared across the family.
 - **No historical backfill.** Streaming begins when you press Start; HWiNFO's own
   min/max/average history is not sent.
+- **Derived channels need their references in the same session's selection**
+  (§8) — not just present on the machine — and count toward the per-parameter
+  registration round-trips like any other channel.
