@@ -1,7 +1,7 @@
 # HWiNFO ATLAS Bridge
 
 ## Project Goal
-Stream live hardware sensor data from [HWiNFO](https://www.hwinfo.com/) into McLaren ATLAS using the MA Data Platforms Streaming Support Library. Readings are pulled from HWiNFO's shared-memory sensor block and written to ATLAS via the Stream API's gRPC services.
+Stream live hardware sensor data from [HWiNFO](https://www.hwinfo.com/) into Motion Applied ATLAS using the MA Data Platforms Streaming Support Library. Readings are pulled from HWiNFO's shared-memory sensor block and written to ATLAS via the Stream API's gRPC services.
 
 ## Architecture
 ```
