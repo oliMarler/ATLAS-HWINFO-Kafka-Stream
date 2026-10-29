@@ -27,6 +27,7 @@ LOAD_IDLE_PCT = 40.0
 MEMORY_HIGH_PCT = 90.0
 FAN_STALLED_RPM = 1.0
 FAN_STALL_TEMP_C = 60.0
+LIMIT_REACHED_PCT = 99.0      # a limit reading given as % of the limit (Ryzen PPT/TDC/EDC)
 
 _THROTTLE_FLAGS = [
     (re.compile(r"thermal throttling", re.I), "critical", "Thermal throttling active"),
@@ -71,10 +72,12 @@ def analyze(values: dict[str, float], channels: list[ChannelDef]) -> list[dict[s
             insights.append({"level": level, "message": message})
 
     # HWiNFO's own throttle/limit flags come first — they are statements of fact,
-    # not inferences from a threshold.
+    # not inferences from a threshold. A Yes/No flag is set at 1. Ryzen's
+    # "CPU PPT Limit" / "TDC Limit" / "EDC Limit" are percentages of the limit
+    # in use (30 % at idle), so those count only when the limit is reached.
     for ch in channels:
         value = values.get(ch.metric_key)
-        if value is None or value < 1:
+        if value is None or value < (LIMIT_REACHED_PCT if ch.units == "%" else 1):
             continue
         for pattern, level, message in _THROTTLE_FLAGS:
             if pattern.search(ch.label):
